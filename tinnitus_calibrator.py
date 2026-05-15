@@ -1,6 +1,10 @@
+import json
+
 import customtkinter as ctk
 import numpy as np
 import sounddevice as sd
+
+from tkinter import filedialog
 
 
 # appearance settings for the window
@@ -9,23 +13,94 @@ ctk.set_default_color_theme("green")
 
 app = ctk.CTk()
 app.title("Tinnitus Calibrator")
-app.geometry("600x420")
+app.geometry("640x400")
 
 # the main frame containing all the elements in the window
 main_frame = ctk.CTkFrame(app, fg_color="transparent")
 main_frame.pack(expand=True, fill="both", padx=30, pady=30)
 main_frame.columnconfigure(2, weight=1)
 
+
 # initialize variables
+is_playing: bool = False
+is_calibrated: bool = False
+calibration_volume: float = 0.0
+
+samplerate: int = 44100
+phase: int = 0
 frequency: int = 440
-frequency_precision: int = 100
 volume: float = -20
+
+frequency_precision: int = 100
 volume_precision: float = 5
+
+# initialize the variables from the JSON file
+fromjson_frequency: int = None
+fromjson_volume: float = None
+fromjson_relative_volume: float = None
 
 # initialize the labels for the sliders
 frequency_var = ctk.StringVar(value=f"{frequency} Hz")
 volume_var = ctk.StringVar(value=f"{volume} dB")
 
+
+# UI function (reload button, updating sliders...)
+def is_same_as_from_json(frequency: int = None, volume: float = None) -> None:
+    """
+    This function is purely for aesthetic purposes. It checks if the current sound characteristics are the same as the
+    ones from the last loaded JSON file. If yes, it updates the "Reload from JSON" button to be marked as the user knows
+    the current sound characteristics are the same as the ones from the last loaded JSON file.
+    :return: Nothing
+    """
+
+    same_as_from_json = True
+    # check if the current volume and frequency differ from the ones from the last loaded JSON file
+    if (frequency is not None) and frequency != fromjson_frequency:
+        same_as_from_json = False
+
+    if (volume is not None) and volume != fromjson_volume:
+        same_as_from_json = False
+
+    # modify the "Reload from JSON" button's state and color
+    if same_as_from_json:
+        reload_btn.configure(state="disabled", fg_color="#8B1A2A")
+    else:
+        reload_btn.configure(state="normal", fg_color="#3e6182")
+
+
+def updating_frequency_sliders() -> None:
+    """
+    This function only updates the frequency sliders position according to the current global frequency variable.
+    :return: Nothing
+    """
+
+    # update the main slider
+    main_frequency_slider.set(frequency)
+
+    # get the new maximum and minimum values for the small slider (not going out of 20 to 10000 Hz)
+    new_max_frequency = min(10_000, int(frequency + frequency_precision))
+    new_min_frequency = max(20, int(frequency - frequency_precision))
+
+    # update the small slider
+    small_frequency_slider.configure(from_=new_min_frequency, to=new_max_frequency)
+    small_frequency_slider.set(frequency)
+
+def updating_volume_sliders() -> None:
+    """
+    This function only updates the volume sliders position according to the current global volume variable.
+    :return: Nothing
+    """
+
+    # update the main slider
+    main_volume_slider.set(volume)
+
+    # get the new maximum and minimum values for the small slider (not going out of -60 to 0 dB)
+    new_max_volume = min(0.0, round(volume + volume_precision, 1))
+    new_min_volume = max(-60.0, round(volume - volume_precision, 1))
+
+    # update the small slider
+    small_volume_slider.configure(from_=new_min_volume, to=new_max_volume)
+    small_volume_slider.set(volume)
 
 # callback functions for the sliders (keep updating their label value)
 def update_frequency(frequency_callback: int) -> None:
@@ -39,6 +114,9 @@ def update_frequency(frequency_callback: int) -> None:
     frequency = round(frequency_callback, 0)
     frequency_var.set(f"{frequency:.0f} Hz")
 
+    # update the reload button
+    is_same_as_from_json(frequency=frequency)
+
 def update_volume(volume_callback: float) -> None:
     """
     This function is the callback for the volume's sliders. It updates the current volume and the volume label.
@@ -49,6 +127,9 @@ def update_volume(volume_callback: float) -> None:
     # update the global volume variable and the label
     volume = float(round(volume_callback, 1))
     volume_var.set(f"{volume:.1f} dB")
+
+    # update the reload button
+    is_same_as_from_json(volume=volume)
 
 
 # callback function for each slider (keep updating the sliders)
@@ -62,13 +143,8 @@ def on_main_frequency_slider(frequency_callback: int) -> None:
     # update the global frequency variable and the label
     update_frequency(frequency_callback)
 
-    # get the new maximum and minimum values for the small slider (not going out of 20 to 10000 Hz)
-    new_max_frequency = min(10_000, int(frequency_callback + frequency_precision))
-    new_min_frequency = max(20, int(frequency_callback - frequency_precision))
-
-    # update the small slider
-    small_frequency_slider.configure(from_=new_min_frequency, to=new_max_frequency)
-    small_frequency_slider.set(frequency)
+    # update the sliders
+    updating_frequency_sliders()
 
 def on_small_frequency_slider(frequency_callback: int):
     """
@@ -79,6 +155,7 @@ def on_small_frequency_slider(frequency_callback: int):
 
     # update the global frequency variable and the label
     update_frequency(frequency_callback)
+
     # update the main slider
     main_frequency_slider.set(frequency)
 
@@ -93,13 +170,8 @@ def on_main_volume_slider(volume_callback: float) -> None:
     # update the global volume variable and the label
     update_volume(volume_callback)
 
-    # get the new maximum and minimum values for the small slider (not going out of -60 to 0 dB)
-    new_max_volume = min(0.0, round(volume_callback + volume_precision, 1))
-    new_min_volume = max(-60.0, round(volume_callback - volume_precision, 1))
-
-    # update the small slider
-    small_volume_slider.configure(from_=new_min_volume, to=new_max_volume)
-    small_volume_slider.set(volume)
+    # update the sliders
+    updating_volume_sliders()
 
 def on_small_volume_slider(volume_callback: float):
     """
@@ -110,18 +182,77 @@ def on_small_volume_slider(volume_callback: float):
 
     # update the global volume variable and the label
     update_volume(volume_callback)
+
     # update the main slider
     main_volume_slider.set(volume)
 
 
+# audio manipulation function
+def callback(outdata, frames, time, status) -> None:
+    global phase
+
+    # create the current block
+    block = (phase + np.arange(frames)) / samplerate
+    # create the sine wave with the current frequency and volume
+    wave = (10**(volume/20)) * np.sin(2 * np.pi * frequency * block)
+
+    outdata[:, 0] = wave # left channel
+    outdata[:, 1] = wave # right channel
+
+    # update the phase
+    phase = (phase + frames) % samplerate
+
+
 # callback functions for the buttons
-def play() -> None:
+def play_sound() -> None:
     """
-    This function is a callback for the "Play" button. It plays the sound corresponding to the values on both the sliders.
+    This function is a callback for the "Play" button. It enables or disables the audio stream depending on the current state.
     :return: Nothing
     """
+    global is_playing
 
-    pass
+    if is_playing:
+        # stop the audio stream
+        is_playing = False
+        stream.stop()
+        # update the play button and enable the other buttons
+        play_btn.configure(text="Play", fg_color="#4b9e3c", hover_color="#3a822e")
+        calibrate_btn.configure(state="normal")
+        save_btn.configure(state="normal")
+        load_btn.configure(state="normal")
+        reload_btn.configure(state="normal")
+
+    else:
+        # start the audio stream
+        is_playing = True
+        stream.start()
+        # update the play button and disable the other buttons
+        play_btn.configure(text="Pause", fg_color="#8B1A2A", hover_color="#A52535", text_color="white")
+        calibrate_btn.configure(state="disabled")
+        save_btn.configure(state="disabled")
+        load_btn.configure(state="disabled")
+        reload_btn.configure(state="disabled")
+
+
+def calibrate_volume() -> None:
+    """
+    This function is a callback for the "Calibrate" button. It calibrates the volume to be adapted to the hearing of the user.
+    This function has to be called at least once before using the saving and loading function.
+    :return: Nothing
+    """
+    global is_calibrated, calibration_volume
+
+    is_calibrated = True
+    calibration_volume = volume
+
+    # change the calibration button color to indicate the sound has been calibrated at least once
+    calibrate_btn.configure(state="enabled", fg_color="#3e6182", hover_color="#304d69", text=f"Calibrated {calibration_volume:.1f} dB")
+
+    # enable the saving and loading buttons
+    save_btn.configure(state="normal")
+    load_btn.configure(state="normal")
+    reload_btn.configure(state="normal")
+
 
 def save_sound() -> None:
     """
@@ -130,20 +261,73 @@ def save_sound() -> None:
     :return: Nothing
     """
 
-    pass
+    # get the current values of the sound characteristics
+    sound_data = {
+        "frequency": frequency,
+        "volume": volume,
+        "calibration_volume": calibration_volume,
+    }
 
-def load_sound() -> None:
-    """"""
+    # ask the user the path where to save the json
+    file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
 
-    pass
+    # save the sound characteristics in a JSON file
+    with open(file_path, "w") as file:
+        file.write(json.dumps(sound_data, indent=4))
+
+def load_sound_from_json() -> None:
+    """
+    This function is a callback for the "Load from JSON" button. It loads the characteristics of a sound from a JSON file.
+    :return: Nothing
+    """
+    global fromjson_frequency, fromjson_volume
+
+    # ask the user the path where to find the JSON file
+    file_path = filedialog.askopenfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
+
+    # extract the sound characteristics from the JSON file
+    with open(file_path, "r") as file:
+        sound_data = json.load(file)
+
+    fromjson_frequency = sound_data["frequency"]
+    fromjson_volume = sound_data["volume"]
+    fromjson_relative_volume = sound_data["volume"] - sound_data["calibration_volume"]
+
+    # update all the sliders
+    main_frequency_slider.set(fromjson_frequency)
+    small_frequency_slider.set(fromjson_frequency)
+
+    main_volume_slider.set(calibration_volume + fromjson_relative_volume)
+    small_frequency_slider.set(calibration_volume + fromjson_relative_volume)
+
+    # update the sound characteristics variables
+    update_frequency(fromjson_frequency)
+    update_volume(calibration_volume + fromjson_relative_volume)
 
 
-# frequency sliders ----------
+def reload_sound_from_json() -> None:
+    """
+    This function is a callback for the "Reload from JSON" button. It reloads the characteristics of a sound
+    from the last loaded JSON file.
+    :return: Nothing
+    """
+    global frequency, volume
+
+    # replace the current global variables with the ones from the last loaded JSON file
+    update_frequency(fromjson_frequency)
+    update_volume(calibration_volume + fromjson_relative_volume)
+
+    # update the sliders
+    updating_frequency_sliders()
+    updating_volume_sliders()
+
+
+# frequency sliders ---------------
 frequency_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
 frequency_frame.grid(row=0, column=0, padx=(0, 4), sticky="n")
 
-ctk.CTkLabel(frequency_frame, text="Frequency:").pack(pady=(0, 4))
-ctk.CTkLabel(frequency_frame, textvariable=frequency_var).pack(pady=(0, 8))
+ctk.CTkLabel(frequency_frame, text="Frequency", font=ctk.CTkFont(size=20)).pack(pady=(0, 4), padx=(20, 0))
+ctk.CTkLabel(frequency_frame, textvariable=frequency_var).pack(pady=(0, 8), padx=(20, 0))
 
 frequency_sliders_frame = ctk.CTkFrame(frequency_frame, fg_color="transparent")
 
@@ -160,17 +344,17 @@ small_frequency_slider = ctk.CTkSlider(frequency_sliders_frame, from_=int(freque
 small_frequency_slider.set(frequency)
 
 # pack and place the components
-frequency_sliders_frame.pack()
-main_frequency_slider.pack(side="left", padx=6)
-small_frequency_slider.pack(side="left", padx=6, pady=(30, 0))
+frequency_sliders_frame.pack(padx=(20, 0))
+main_frequency_slider.pack(side="left", padx=10)
+small_frequency_slider.pack(side="left", padx=10, pady=(40, 0))
 
 
-# volume sliders ----------
+# volume sliders ---------------
 volume_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
 volume_frame.grid(row=0, column=1, padx=(16, 0), sticky="n")
 
-ctk.CTkLabel(volume_frame, text="Volume:").pack(pady=(0, 4))
-ctk.CTkLabel(volume_frame, textvariable=volume_var).pack(pady=(0, 8))
+ctk.CTkLabel(volume_frame, text="Volume", font=ctk.CTkFont(size=20)).pack(pady=(0, 4), padx=(40, 0))
+ctk.CTkLabel(volume_frame, textvariable=volume_var).pack(pady=(0, 8), padx=(40, 0))
 
 volume_sliders_frame = ctk.CTkFrame(volume_frame, fg_color="transparent")
 
@@ -187,33 +371,39 @@ small_volume_slider = ctk.CTkSlider(volume_sliders_frame, from_=int(volume-volum
 small_volume_slider.set(volume)
 
 # pack and place the components
-volume_sliders_frame.pack()
-main_volume_slider.pack(side="left", padx=6)
-small_volume_slider.pack(side="left", padx=6, pady=(40, 0))
+volume_sliders_frame.pack(padx=(40, 0))
+main_volume_slider.pack(side="left", padx=10)
+small_volume_slider.pack(side="left", padx=10, pady=(40, 0))
 
 
-# buttons ----------
+# buttons ---------------
 btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
 btn_frame.grid(row=0, column=3, sticky="e")
 
-ctk.CTkButton(btn_frame, text="Play", command=play,
-              width=200, height=50, fg_color="#8B1A2A", hover_color="#A52535", text_color="white").pack(pady=15)
-ctk.CTkButton(btn_frame, text="Save", command=save_sound,
-              width=200, height=50, fg_color="#8B1A2A", hover_color="#A52535", text_color="white").pack(pady=15)
-ctk.CTkButton(btn_frame, text="Load", command=load_sound,
-              width=200, height=50, fg_color="#8B1A2A", hover_color="#A52535", text_color="white").pack(pady=15)
 
+calibrate_btn = ctk.CTkButton(btn_frame, text="Calibrate", command=calibrate_volume,
+              width=240, height=70, fg_color="#8B1A2A", hover_color="#A52535", text_color="white")
+play_btn      = ctk.CTkButton(btn_frame, text="Play", command=play_sound,
+              width=240, height=70, fg_color="#4b9e3c", hover_color="#3a822e", text_color="white")
+save_btn      = ctk.CTkButton(btn_frame, text="Save", command=save_sound, state="disabled",
+              width=240, height=30, fg_color="#3e6182", hover_color="#304d69", text_color="white")
+load_btn      = ctk.CTkButton(btn_frame, text="Load from JSON", command=load_sound_from_json, state="disabled",
+              width=110, height=30, fg_color="#3e6182", hover_color="#304d69", text_color="white")
+reload_btn = ctk.CTkButton(btn_frame, text="Reload from JSON", command=reload_sound_from_json, state="disabled",
+              width=110, height=30, fg_color="#3e6182", hover_color="#304d69", text_color="white")
+
+
+calibrate_btn.pack(padx=(0, 20), pady=15)
+play_btn.pack(padx=(0, 20), pady=15)
+save_btn.pack(padx=(0, 20), pady=15)
+load_btn.pack(pady=15, side="left")
+reload_btn.pack(padx=(20, 0), pady=15, side="left")
+
+# initialize the audio stream
+stream = sd.OutputStream(samplerate=samplerate, channels=2, callback=callback)
 
 # start the app
 app.mainloop()
-
-
-
-
-
-
-
-
 
 
 
