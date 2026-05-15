@@ -93,7 +93,7 @@ def updating_volume_sliders() -> None:
     # update the main slider
     main_volume_slider.set(volume)
 
-    # get the new maximum and minimum values for the small slider (not going out of -60 to 0 dB)
+    # get the new maximum and minimum values for the small slider (not going out of -60 to 20 dB)
     new_max_volume = min(0.0, round(volume + volume_precision, 1))
     new_min_volume = max(-60.0, round(volume - volume_precision, 1))
 
@@ -124,7 +124,7 @@ def update_volume(volume_callback: float) -> None:
     """
     global volume
     # update the global volume variable and the label
-    volume = float(round(volume_callback, 1))
+    volume = min(0.0, float(round(volume_callback, 1)))
     volume_var.set(f"{volume:.1f} dB")
 
     # update the reload button
@@ -378,15 +378,15 @@ btn_frame.grid(row=0, column=3, sticky="e")
 
 
 calibrate_btn = ctk.CTkButton(btn_frame, text="Calibrate", command=calibrate_volume,
-              width=240, height=70, fg_color="#8B1A2A", hover_color="#A52535", text_color="white")
+                              width=240, height=70, fg_color="#8B1A2A", hover_color="#A52535", text_color="white")
 play_btn      = ctk.CTkButton(btn_frame, text="Play", command=play_sound,
-              width=240, height=70, fg_color="#4b9e3c", hover_color="#3a822e", text_color="white")
+                              width=240, height=70, fg_color="#4b9e3c", hover_color="#3a822e", text_color="white")
 save_btn      = ctk.CTkButton(btn_frame, text="Save", command=save_sound, state="disabled",
-              width=240, height=30, fg_color="#3e6182", hover_color="#304d69", text_color="white")
+                              width=240, height=30, fg_color="#3e6182", hover_color="#304d69", text_color="white")
 load_btn      = ctk.CTkButton(btn_frame, text="Load from JSON", command=load_sound_from_json, state="disabled",
-              width=110, height=30, fg_color="#3e6182", hover_color="#304d69", text_color="white")
-reload_btn = ctk.CTkButton(btn_frame, text="Reload from JSON", command=reload_sound_from_json, state="disabled",
-              width=110, height=30, fg_color="#3e6182", hover_color="#304d69", text_color="white")
+                              width=110, height=30, fg_color="#3e6182", hover_color="#304d69", text_color="white")
+reload_btn    = ctk.CTkButton(btn_frame, text="Reload from JSON", command=reload_sound_from_json, state="disabled",
+                              width=110, height=30, fg_color="#3e6182", hover_color="#304d69", text_color="white")
 
 
 calibrate_btn.pack(padx=(0, 20), pady=15)
