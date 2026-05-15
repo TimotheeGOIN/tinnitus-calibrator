@@ -1,3 +1,4 @@
+
 import json
 
 import customtkinter as ctk
@@ -45,27 +46,25 @@ volume_var = ctk.StringVar(value=f"{volume} dB")
 
 
 # UI function (reload button, updating sliders...)
-def is_same_as_from_json(frequency: int = None, volume: float = None) -> None:
+def is_same_as_from_json() -> None:
     """
     This function is purely for aesthetic purposes. It checks if the current sound characteristics are the same as the
     ones from the last loaded JSON file. If yes, it updates the "Reload from JSON" button to be marked as the user knows
     the current sound characteristics are the same as the ones from the last loaded JSON file.
     :return: Nothing
     """
+    global frequency, volume, fromjson_frequency, fromjson_relative_volume
 
-    same_as_from_json = True
-    # check if the current volume and frequency differ from the ones from the last loaded JSON file
-    if (frequency is not None) and frequency != fromjson_frequency:
-        same_as_from_json = False
-
-    if (volume is not None) and volume != fromjson_volume:
-        same_as_from_json = False
-
-    # modify the "Reload from JSON" button's state and color
-    if same_as_from_json:
+    # if current sound characs are the same as the ones from the last loaded sound
+    if frequency == fromjson_frequency and (volume - calibration_volume) == fromjson_relative_volume:
         reload_btn.configure(state="disabled", fg_color="#8B1A2A")
-    else:
+
+    # if different, BUT the values from the JSON aren't both None (default): a sound has already been loaded, but current characs doesn't match it
+    elif (fromjson_volume is not None) or (fromjson_relative_volume is not None):
         reload_btn.configure(state="normal", fg_color="#3e6182")
+
+    else: # if the values from the JSON are both None (default): no sound has been loaded yet
+        reload_btn.configure(state="disabled", fg_color="#3e6182")
 
 
 def updating_frequency_sliders() -> None:
@@ -115,7 +114,7 @@ def update_frequency(frequency_callback: int) -> None:
     frequency_var.set(f"{frequency:.0f} Hz")
 
     # update the reload button
-    is_same_as_from_json(frequency=frequency)
+    is_same_as_from_json()
 
 def update_volume(volume_callback: float) -> None:
     """
@@ -129,7 +128,7 @@ def update_volume(volume_callback: float) -> None:
     volume_var.set(f"{volume:.1f} dB")
 
     # update the reload button
-    is_same_as_from_json(volume=volume)
+    is_same_as_from_json()
 
 
 # callback function for each slider (keep updating the sliders)
@@ -251,7 +250,6 @@ def calibrate_volume() -> None:
     # enable the saving and loading buttons
     save_btn.configure(state="normal")
     load_btn.configure(state="normal")
-    reload_btn.configure(state="normal")
 
 
 def save_sound() -> None:
@@ -275,12 +273,13 @@ def save_sound() -> None:
     with open(file_path, "w") as file:
         file.write(json.dumps(sound_data, indent=4))
 
+
 def load_sound_from_json() -> None:
     """
     This function is a callback for the "Load from JSON" button. It loads the characteristics of a sound from a JSON file.
     :return: Nothing
     """
-    global fromjson_frequency, fromjson_volume
+    global fromjson_frequency, fromjson_volume, fromjson_relative_volume
 
     # ask the user the path where to find the JSON file
     file_path = filedialog.askopenfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
@@ -293,16 +292,13 @@ def load_sound_from_json() -> None:
     fromjson_volume = sound_data["volume"]
     fromjson_relative_volume = sound_data["volume"] - sound_data["calibration_volume"]
 
-    # update all the sliders
-    main_frequency_slider.set(fromjson_frequency)
-    small_frequency_slider.set(fromjson_frequency)
-
-    main_volume_slider.set(calibration_volume + fromjson_relative_volume)
-    small_frequency_slider.set(calibration_volume + fromjson_relative_volume)
-
     # update the sound characteristics variables
     update_frequency(fromjson_frequency)
     update_volume(calibration_volume + fromjson_relative_volume)
+
+    # update all the sliders
+    updating_frequency_sliders()
+    updating_volume_sliders()
 
 
 def reload_sound_from_json() -> None:
@@ -397,7 +393,7 @@ calibrate_btn.pack(padx=(0, 20), pady=15)
 play_btn.pack(padx=(0, 20), pady=15)
 save_btn.pack(padx=(0, 20), pady=15)
 load_btn.pack(pady=15, side="left")
-reload_btn.pack(padx=(20, 0), pady=15, side="left")
+reload_btn.pack(padx=(13, 0), pady=15, side="left")
 
 # initialize the audio stream
 stream = sd.OutputStream(samplerate=samplerate, channels=2, callback=callback)
