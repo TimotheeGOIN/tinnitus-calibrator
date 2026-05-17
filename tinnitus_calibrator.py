@@ -22,6 +22,9 @@ main_frame.pack(expand=True, fill="both", padx=30, pady=30)
 main_frame.columnconfigure(2, weight=1)
 
 
+# the magic word (to recognize the JSON file)
+magicword = "the song bird"
+
 # initialize variables
 is_playing: bool = False
 is_calibrated: bool = False
@@ -261,12 +264,13 @@ def save_sound() -> None:
 
     # get the current values of the sound characteristics
     sound_data = {
+        "magicword": magicword,
         "frequency": frequency,
         "volume": volume,
         "calibration_volume": calibration_volume,
     }
 
-    # ask the user the path where to save the json
+    # ask the user the path where to save the JSON
     file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
 
     # save the sound characteristics in a JSON file
@@ -287,6 +291,13 @@ def load_sound_from_json() -> None:
     # extract the sound characteristics from the JSON file
     with open(file_path, "r") as file:
         sound_data = json.load(file)
+
+    # ensure the JSON is compatible by checking the magicword
+    try:
+        if sound_data["magicword"] != magicword:
+            raise ValueError("The JSON file is not compatible with this program.")
+    except KeyError:
+        raise ValueError("The JSON file is not compatible with this program.")
 
     fromjson_frequency = sound_data["frequency"]
     fromjson_volume = sound_data["volume"]
